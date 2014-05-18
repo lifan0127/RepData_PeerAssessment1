@@ -1,3 +1,11 @@
+**Note**: This RMD was created using the Preview Release of RStudio (0.98.847) and may contain features incompatible with earlier versions of RStudio.
+
+**Note2**: Some calculations (mean, median etc) were complted using inline r script, which was not render in the final html.
+
+**Required Packages**: ggplot2, lubricate, reshape2
+
+Below is the original instruction.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## Introduction
 
 It is now possible to collect a large amount of data about personal
