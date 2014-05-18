@@ -1,0 +1,173 @@
+## Reproducible Research: Peer Assessment 1
+
+5/18/2014
+
+**Note**: This RMD was created using the Preview Release of RStudio (0.98.847), which may have compatibility issues with earlier versions of RStudio.
+
+
+### Loading and preprocessing the data
+
+- Load the data (i.e. read.csv())
+- Process/transform the data (if necessary) into a format suitable for your analysis
+
+```{r, message=FALSE}
+library(ggplot2)
+library(lubridate)
+
+options(digits=0, "scipen" = 10)
+
+activity <- read.csv("activity.csv", stringsAsFactors=FALSE)
+activity$date <- ymd(activity$date)
+str(activity)
+
+```
+
+
+
+### What is mean total number of steps taken per day?
+
+- Make a histogram of the total number of steps taken each day
+- Calculate and report the mean and median total number of steps taken per day
+
+```{r, message=FALSE}
+daily.sum <- aggregate(steps ~ date, data=activity, sum, na.rm=TRUE, na.action=na.pass)
+colnames(daily.sum) <- c("date", "total.steps")
+ggplot(daily.sum, aes(x=total.steps)) + 
+  geom_bar(stat="bin", binwidth=500, colour="black", fill="blue", alpha=0.5) +
+  xlab("total number of steps per day") +
+  theme_bw()
+
+```
+
+The **mean** is `r mean(daily.sum$total.steps)`. The **median** is `r median(daily.sum$total.steps)`.
+
+
+
+### What is the average daily activity pattern?
+
+- Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+- Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+```{r, message=FALSE}
+time.series <- aggregate(steps ~ interval, data=activity, mean, na.rm=TRUE, na.action=na.pass)
+colnames(time.series) <- c("interval", "mean.steps")
+ggplot(time.series, aes(x=interval, y=mean.steps)) + 
+  geom_line(color="blue", alpha=0.5, size=2) + 
+  theme_bw()
+
+```
+
+The time interval with maximum number of steps is `r time.series$interval[which.max(time.series$mean.steps)]`.
+
+
+
+### Imputing missing values
+
+Note that there are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+- Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+- Impute the mssing values using the mean/median for that day, or the mean for that 5-minute interval.
+- Create a new dataset that is equal to the original dataset but with the missing data filled in.
+- Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. 
+- What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+The total missing value in the dataset is `r sum(is.na(activity))`.
+
+```{r, message=FALSE}
+library(reshape2)
+activity.cast <- dcast(activity, interval~date, value.var="steps")
+rownames(activity.cast) <- activity.cast$interval
+activity.cast$interval <- NULL
+
+# Helper function to replace NA with mean or median
+ReplaceNA <- function(x, method="mean"){
+  x[is.na(x)] <- do.call(method, list(x, na.rm=TRUE))
+  return(x)
+}
+
+# Replace the mssing values using the mean/median for that day
+date.mean <- apply(activity.cast, 2, ReplaceNA)
+date.median <- apply(activity.cast, 2, ReplaceNA, method="median")
+
+# Replace the mssing values using the mean/median for that 5-minute interval
+interval.mean <- t(apply(activity.cast, 1, ReplaceNA))
+interval.median <- t(apply(activity.cast, 1, ReplaceNA, method="median"))
+
+```
+
+
+```{r, message=FALSE, fig.width=10, fig.height=7.5}
+# Compute total step and combine into one df for ploting & comparison
+combined <- data.frame(date.mean = colSums(date.mean, na.rm=TRUE),
+                       date.median = colSums(date.median, na.rm=TRUE),
+                       interval.mean = colSums(interval.mean, na.rm=TRUE),
+                       interval.median = colSums(interval.median, na.rm=TRUE))
+combined$date <- rownames(combined)
+combined.melt <- melt(combined, id="date")
+
+#hist(colSums(date.mean, na.rm=TRUE), breaks=40)
+
+ggplot(combined.melt, aes(x=value)) +
+  geom_bar(stat="bin", binwidth=500, colour="black", fill="blue", alpha=0.5) +
+  facet_wrap(~variable, ncol=2) +
+  xlab("total number of steps per day") +
+  theme_bw()
+
+```
+
+Imputation      | Mean                                           | Median
+--------------- | ---------------------------------------------- | ------------------------------------------------
+No (control)    | `r mean(daily.sum$total.steps)`                | `r median(daily.sum$total.steps)`
+Day mean        | `r mean(colSums(date.mean, na.rm=TRUE))`       | `r median(colSums(date.mean, na.rm=TRUE))`
+Day median      | `r mean(colSums(date.median, na.rm=TRUE))`     | `r median(colSums(date.median, na.rm=TRUE))`
+Interval mean   | `r mean(colSums(interval.mean, na.rm=TRUE))`   | `r median(colSums(interval.mean, na.rm=TRUE))`
+Interval median | `r mean(colSums(interval.median, na.rm=TRUE))` | `r median(colSums(interval.median, na.rm=TRUE))`
+
+Different imputing methods have different impacts as shown in the table above. Especially, imputation with mean or median of the same day is ineffective given the pattern of the missing data. 
+
+
+
+### Are there differences in activity patterns between weekdays and weekends?
+
+For this part the weekdays() function may be of some help here. Use the dataset with the filled-in missing values for this part.
+
+Create a new factor variable in the dataset with two levels -- "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). The plot should look something like the following, which was creating using simulated data:
+
+Intuitively, it makes more sense that the individual is likely to be engaged in similar activities every day (assuming s/he has a regular schedule). Whereas the level of activity at different time of the day may be less indicative. Also using median may be a better option than mean becuase using mean cause significant change in data distribution shown in the histgram. Such a big change may not have enough support.
+
+```{r, message=FALSE}
+interval.median <- as.data.frame(interval.median)
+interval.median$interval <- rownames(activity.cast)
+imputed.activity <- melt(interval.median, id="interval")
+colnames(imputed.activity) <- c("interval", "date", "steps")
+imputed.activity$date <- ymd(imputed.activity$date)
+
+weekend <- subset(imputed.activity, weekdays(date) %in% c('Saturday','Sunday'))
+weekday <- subset(imputed.activity, !(weekdays(date) %in% c('Saturday','Sunday')))
+
+weekend.ts <- aggregate(steps ~ interval, data=weekend, mean, na.rm=TRUE, na.action=na.pass)
+weekday.ts <- aggregate(steps ~ interval, data=weekday, mean, na.rm=TRUE, na.action=na.pass)
+
+time.series2 <- rbind(data.frame(weekend.ts, week="weekend"),
+                      data.frame(weekday.ts, week="weekday"))
+time.series2$interval <- as.numeric(time.series2$interval)
+
+ggplot(time.series2, aes(x=interval, y=steps)) + 
+  geom_line(color="blue", alpha=0.5, size=2) + 
+  facet_wrap(~week, ncol=1) +
+  theme_bw()
+
+```
+
+
+
+### Summary
+In summary, there are several significant difference between the weekday and weekend profiles. 
+
+- The weekend curve has a delayed onset perhaps related to late wake up time. 
+- There is in general a higher degree of activities during the day than weekday.
+- There are also more activities towards than the end of the day.
+
+
